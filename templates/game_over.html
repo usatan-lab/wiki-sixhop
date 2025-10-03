@@ -1,0 +1,187 @@
+<!-- templates/game_clear.html -->
+{% extends "base.html" %}
+
+{% block title %}Wiki Game - ゲームオーバー{% endblock %}
+
+{% block content %}
+<div class="container game-over-page">
+    <h1>GAME OVER!!!</h1>
+    <div class="game-clear">
+        <p>諦めないものだけが勝つ</p>
+        <div class="button-container">
+            <button onclick="location.href='{{ url_for('opening') }}'">もう一度</button>
+            <button class="share-btn" onclick="openSharePopup();">結果をシェア</button>
+        </div>
+        
+        <!-- シェアポップアップ -->
+        <div id="sharePopup" class="share-popup">
+            <div class="share-popup-content">
+                <div class="share-popup-header">
+                    <h3>結果をシェア</h3>
+                    <button type="button" class="close-btn" onclick="closeSharePopup()">×</button>
+                </div>
+                <div class="share-image-container">
+                    <canvas id="resultCanvas" width="400" height="300"></canvas>
+                </div>
+                <div class="share-buttons">
+                    <button class="share-btn-twitter" onclick="shareToTwitter()">
+                        <span class="icon">🐦</span>
+                        Twitter
+                    </button>
+                    <button class="share-btn-instagram" onclick="shareToInstagram()">
+                        <span class="icon">📷</span>
+                        Instagram
+                    </button>
+                    <button class="share-btn-copy" onclick="copyLink()">
+                        <span class="icon">📋</span>
+                        リンクコピー
+                    </button>
+                    <button class="share-btn-download" onclick="downloadImage()">
+                        <span class="icon">⬇️</span>
+                        画像保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // シェアポップアップ関連の関数
+    function openSharePopup() {
+        const popup = document.getElementById('sharePopup');
+        popup.classList.add('show');
+        generateResultImage();
+    }
+
+    function closeSharePopup() {
+        const popup = document.getElementById('sharePopup');
+        popup.classList.remove('show');
+    }
+
+    // リザルト画像を生成（ゲームオーバー用）
+    function generateResultImage() {
+        const canvas = document.getElementById('resultCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // キャンバスのサイズを設定
+        canvas.width = 400;
+        canvas.height = 300;
+        
+        // 背景グラデーション（落ち着いた色）
+        const gradient = ctx.createLinearGradient(0, 0, 400, 300);
+        gradient.addColorStop(0, '#f8f9fa');
+        gradient.addColorStop(1, '#e9ecef');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 400, 300);
+        
+        // タイトル
+        ctx.fillStyle = '#212529';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Wiki SixHop', 200, 60);
+        
+        // サブタイトル
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('GAME OVER', 200, 100);
+        
+        // スコア情報を取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const clicks = urlParams.get('clicks') || 0;
+        const time = urlParams.get('time') || 0;
+        const target = urlParams.get('target') || 'ネコ';
+        
+        const timeSec = (time / 1000).toFixed(1);
+        
+        // スコア表示
+        ctx.font = '20px Arial';
+        ctx.fillText(`スコア: ${clicks}クリック / ${timeSec}秒`, 200, 140);
+        
+        if (target && target !== 'ネコ') {
+            ctx.fillText(`目標: ${target}`, 200, 170);
+        }
+        
+        // 励ましのメッセージ
+        ctx.font = '16px Arial';
+        ctx.fillText('諦めないものだけが勝つ', 200, 220);
+        
+        // フッター
+        ctx.font = '14px Arial';
+        ctx.fillText('Wiki SixHopで再挑戦しよう！', 200, 280);
+    }
+
+    // シェア機能
+    function shareToTwitter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const clicks = urlParams.get('clicks') || 0;
+        const time = urlParams.get('time') || 0;
+        const target = urlParams.get('target') || 'ネコ';
+        
+        const timeSec = (time / 1000).toFixed(1);
+        let text = `Wiki SixHopで ${clicks}クリック / ${timeSec}秒でゲームオーバー！`;
+        if (target && target !== 'ネコ') {
+            text += ` (目標: ${target})`;
+        }
+        text += ' #WikiLink';
+        
+        const url = location.href;
+        const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+        window.open(intent, '_blank');
+    }
+
+    function shareToInstagram() {
+        // Instagramは直接投稿できないため、画像をダウンロードして案内
+        const canvas = document.getElementById('resultCanvas');
+        const dataURL = canvas.toDataURL('image/png');
+        
+        // 一時的にダウンロードリンクを作成
+        const link = document.createElement('a');
+        link.download = 'wiki-link-game-over.png';
+        link.href = dataURL;
+        link.click();
+        
+        alert('画像をダウンロードしました！\nInstagramストーリーにアップロードしてシェアしてください。');
+    }
+
+    function copyLink() {
+        const url = location.href;
+        navigator.clipboard.writeText(url).then(() => {
+            alert('リンクをコピーしました！');
+        }).catch(() => {
+            // フォールバック
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('リンクをコピーしました！');
+        });
+    }
+
+    function downloadImage() {
+        const canvas = document.getElementById('resultCanvas');
+        const dataURL = canvas.toDataURL('image/png');
+        
+        const link = document.createElement('a');
+        link.download = 'wiki-link-game-over.png';
+        link.href = dataURL;
+        link.click();
+    }
+
+    // ポップアップ外クリックで閉じる
+    document.addEventListener('click', function(event) {
+        const popup = document.getElementById('sharePopup');
+        if (event.target === popup) {
+            closeSharePopup();
+        }
+    });
+
+    // ESCキーで閉じる
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeSharePopup();
+        }
+    });
+</script>
+</div>
+{% endblock %}

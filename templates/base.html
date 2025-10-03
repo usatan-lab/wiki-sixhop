@@ -1,0 +1,101 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta property="og:title" content="Wiki SixHop - 六次の隔たり -" />
+    <meta property="og:description" content="Wikipediaのリンクだけで目標記事まで辿り着ける？最短ルートに挑戦！" />
+    <meta property="og:url" content="https://your-domain.example/" />
+    <meta property="og:image" content="https://your-domain.example/static/ogp/wikilink_og.png" />
+    <meta property="og:type" content="website" />
+    <title>{% block title %}Wiki SixHop{% endblock %}</title>
+    
+    <!-- パフォーマンス最適化 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="public, max-age=3600">
+    <meta http-equiv="Expires" content="3600">
+    
+    <!-- Google FontsのNoto Sansをインポート（最適化版） -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSSのプリロード -->
+    <link rel="preload" href="{{ url_for('static', filename='css/styles.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}"></noscript>
+    
+    <!-- JavaScriptのプリロード -->
+    <link rel="preload" href="{{ url_for('static', filename='js/scripts.js') }}" as="script">
+</head>
+<body>
+    <header>
+        <div class="header-container">
+            <div class="logo">
+                <a href="/" class="logo-link">
+                    <div class="logo-container">
+                        <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Wiki SixHop Logo" class="logo-image">
+                        <div class="logo-text">
+                            <div class="logo-wiki">Wiki</div>
+                            <div class="logo-sixhop">SixHop</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <nav>
+                <ul class="nav-links">
+                    <!-- ナビゲーションリンクをここに追加 -->
+                </ul>
+            </nav>
+            <div class="contact-button">
+                <button id="contactBtn" class="contact-btn">お問い合わせ</button>
+            </div>
+        </div>
+    </header>
+
+    <div id="content">
+        {% block content %}
+        <!-- コンテンツがここに入ります -->
+        {% endblock %}
+    </div>
+
+    <!-- お問い合わせフォームモーダル -->
+    <div id="contactModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>お問い合わせ</h2>
+            <iframe src="https://seed-limpet-2f1.notion.site/ebd/281e3082375f8091a831f75ebd810413" width="100%" height="600" frameborder="0" allowfullscreen></iframe>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2025 Wiki SixHop. All rights reserved.</p>
+    </footer>
+
+    <!-- スクリプトは通常、bodyの最後に配置 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+    
+    <!-- お問い合わせモーダルのスクリプト -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('contactModal');
+            const btn = document.getElementById('contactBtn');
+            const span = document.getElementsByClassName('close')[0];
+
+            btn.onclick = function() {
+                modal.style.display = 'block';
+            }
+
+            span.onclick = function() {
+                modal.style.display = 'none';
+            }
+
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+

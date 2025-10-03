@@ -1,0 +1,50 @@
+<!-- templates/game.html -->
+{% extends "base.html" %}
+
+{% block title %}Wiki Game - {{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="game-info">
+        <p>目標のページ: <span class="target-title">{{ target_title }}</span></p>
+        <p>現在のページ: {{ page_title }}</p>
+        <p>残りクリック数: {{ clicks_remaining }}</p>
+        <p>経過時間: <span id="elapsed-time">0.0秒</span></p>
+        <button onclick="location.href='{{ url_for('reset', difficulty=difficulty) }}'">リセット</button>
+    </div>
+    <br><br>
+    <h1 class="page-title">{{ page_title }}</h1>
+
+    <div class="wiki-content">
+        {{ parsed_html|safe }}
+    </div>
+</div>
+
+<script>
+// リアルタイムタイマー機能
+function startTimer() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const startTime = parseInt(urlParams.get('start_time')) || Date.now();
+    
+    function updateTimer() {
+        const currentTime = Date.now();
+        const elapsed = (currentTime - startTime) / 1000; // 秒に変換
+        const timeElement = document.getElementById('elapsed-time');
+        
+        if (timeElement) {
+            timeElement.textContent = elapsed.toFixed(1) + '秒';
+        }
+    }
+    
+    // 初期表示
+    updateTimer();
+    
+    // 0.1秒ごとに更新
+    setInterval(updateTimer, 100);
+}
+
+// ページ読み込み時にタイマー開始
+document.addEventListener('DOMContentLoaded', startTimer);
+</script>
+{% endblock %}

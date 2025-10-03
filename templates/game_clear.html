@@ -1,0 +1,401 @@
+<!-- templates/game_clear.html -->
+{% extends "base.html" %}
+
+{% block title %}Wiki SixHop - ゲームクリア{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="game-clear">
+        <h1>GAME CLEAR!!</h1>
+        <p>おめでとう‼︎</p>
+        
+        <!-- スコア表示エリア -->
+        <div class="score-display">
+            <p id="current-score">今回のスコア: <span id="score-details"></span></p>
+        </div>
+        
+        <!-- ランキング表示エリア -->
+        <div class="ranking-section">
+            <h3>🏆 ランキング</h3>
+            <div id="result" class="ranking-list"></div>
+        </div>
+        
+        <!-- ボタンコンテナ -->
+        <div class="button-container">
+            <button onclick="location.href='{{ url_for('opening') }}'">ホーム</button>
+            <button class="share-btn" onclick="openSharePopup();">結果をシェア</button>
+        </div>
+        
+        <!-- シェアポップアップ -->
+        <div id="sharePopup" class="share-popup">
+            <div class="share-popup-content">
+                <div class="share-popup-header">
+                    <h3>結果をシェア</h3>
+                    <button type="button" class="close-btn" onclick="closeSharePopup()">×</button>
+                </div>
+                <div class="share-image-container">
+                    <canvas id="resultCanvas" width="400" height="300"></canvas>
+                </div>
+                <div class="share-buttons">
+                    <button class="share-btn-twitter" onclick="shareToTwitter()">
+                        <span class="icon">🐦</span>
+                        Twitter(X)
+                    </button>
+                    <button class="share-btn-instagram" onclick="shareToInstagram()">
+                        <span class="icon">📷</span>
+                        Instagram
+                    </button>
+                    <button class="share-btn-copy" onclick="copyLink()">
+                        <span class="icon">📋</span>
+                        リンクコピー
+                    </button>
+                    <button class="share-btn-download" onclick="downloadImage()">
+                        <span class="icon">⬇️</span>
+                        画像保存
+                    </button>
+                </div>
+            </div>
+        </div>
+<script>
+    // シェアポップアップ関連の関数
+    function openSharePopup() {
+        const popup = document.getElementById('sharePopup');
+        popup.classList.add('show');
+        generateResultImage();
+    }
+
+    function closeSharePopup() {
+        const popup = document.getElementById('sharePopup');
+        popup.classList.remove('show');
+    }
+
+    // リザルト画像を生成
+    function generateResultImage() {
+        const canvas = document.getElementById('resultCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // キャンバスのサイズを設定
+        canvas.width = 400;
+        canvas.height = 300;
+        
+        // 背景グラデーション
+        const gradient = ctx.createLinearGradient(0, 0, 400, 300);
+        gradient.addColorStop(0, '#f8f9fa');
+        gradient.addColorStop(1, '#e9ecef');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 400, 300);
+        
+        // タイトル
+        ctx.fillStyle = '#212529';
+        ctx.font = 'bold 32px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Wiki SixHop', 200, 60);
+        
+        // サブタイトル
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('GAME CLEAR!', 200, 100);
+        
+        // スコア情報を取得
+        const urlParams = new URLSearchParams(window.location.search);
+        const clicks = urlParams.get('clicks') || 0;
+        const time = urlParams.get('time') || 0;
+        const target = urlParams.get('target') || 'ネコ';
+        
+        const timeSec = (time / 1000).toFixed(1);
+        
+        // スコア表示
+        ctx.font = '20px Arial';
+        ctx.fillText(`スコア: ${clicks}クリック / ${timeSec}秒`, 200, 140);
+        
+        if (target && target !== 'ネコ') {
+            ctx.fillText(`目標: ${target}`, 200, 170);
+        }
+        
+        // ランキング情報
+        const ranking = getRanking().slice(0, 3);
+        ctx.font = '16px Arial';
+        ctx.fillText('🏆 ランキング', 200, 200);
+        
+        ranking.forEach((score, index) => {
+            const rank = index + 1;
+            const timeText = (score.time / 1000).toFixed(1);
+            ctx.fillText(`${rank}位: ${score.clicks}クリック / ${timeText}秒`, 200, 220 + (index * 20));
+        });
+        
+        // フッター
+        ctx.font = '14px Arial';
+        ctx.fillText('Wiki SixHopで遊ぼう！', 200, 280);
+    }
+
+    // シェア機能
+    function shareToTwitter() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const clicks = urlParams.get('clicks') || 0;
+        const time = urlParams.get('time') || 0;
+        const target = urlParams.get('target') || 'ネコ';
+        
+        const timeSec = (time / 1000).toFixed(1);
+        let text = `Wiki SixHopで ${clicks}クリック / ${timeSec}秒！`;
+        if (target && target !== 'ネコ') {
+            text += ` (目標: ${target})`;
+        }
+        text += ' #WikiSixHop';
+        
+        const url = location.href;
+        const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+        window.open(intent, '_blank');
+    }
+
+    function shareToInstagram() {
+        // Instagramは直接投稿できないため、画像をダウンロードして案内
+        const canvas = document.getElementById('resultCanvas');
+        const dataURL = canvas.toDataURL('image/png');
+        
+        // 一時的にダウンロードリンクを作成
+        const link = document.createElement('a');
+        link.download = 'wiki-link-result.png';
+        link.href = dataURL;
+        link.click();
+        
+        alert('画像をダウンロードしました！\nInstagramストーリーにアップロードしてシェアしてください。');
+    }
+
+    function copyLink() {
+        const url = location.href;
+        navigator.clipboard.writeText(url).then(() => {
+            alert('リンクをコピーしました！');
+        }).catch(() => {
+            // フォールバック
+            const textArea = document.createElement('textarea');
+            textArea.value = url;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('リンクをコピーしました！');
+        });
+    }
+
+    function downloadImage() {
+        const canvas = document.getElementById('resultCanvas');
+        const dataURL = canvas.toDataURL('image/png');
+        
+        const link = document.createElement('a');
+        link.download = 'wiki-link-result.png';
+        link.href = dataURL;
+        link.click();
+    }
+
+    // ポップアップ外クリックで閉じる
+    document.addEventListener('click', function(event) {
+        const popup = document.getElementById('sharePopup');
+        if (event.target === popup) {
+            closeSharePopup();
+        }
+    });
+
+    // ESCキーで閉じる
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            closeSharePopup();
+        }
+    });
+</script>
+<script>
+    // 画面幅に応じてエフェクトの開始位置を調整
+    var originY = window.innerWidth < 768 ? 0.4 : 0.6;
+
+    // confettiライブラリが読み込まれた後に実行
+    function startConfetti() {
+        if (typeof confetti !== 'undefined') {
+            // メインのクラッカー
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: originY }
+            });
+
+            // 追加のクラッカー（少し遅延）
+            setTimeout(() => {
+                confetti({
+                    particleCount: 50,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0, y: originY }
+                });
+            }, 250);
+
+            setTimeout(() => {
+                confetti({
+                    particleCount: 50,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1, y: originY }
+                });
+            }, 400);
+
+            // 最後の大爆発
+            setTimeout(() => {
+                confetti({
+                    particleCount: 200,
+                    spread: 100,
+                    origin: { y: originY }
+                });
+            }, 800);
+        } else {
+            console.error('confetti library not loaded');
+        }
+    }
+
+    // DOMContentLoadedイベントで実行
+    document.addEventListener('DOMContentLoaded', function() {
+        startConfetti();
+    });
+
+    function saveScore({ clicks, timeMs, challengeId = "default" }) {
+        try {
+            // バリデーション
+            if (!clicks || clicks <= 0 || !timeMs || timeMs <= 0) {
+                console.warn('Invalid score data:', { clicks, timeMs, challengeId });
+                return [];
+            }
+            
+            const raw = localStorage.getItem("scores");
+            const scores = raw ? JSON.parse(raw) : [];
+            
+            // 新しいスコアを追加
+            scores.push({
+                clicks,
+                time: timeMs,
+                challengeId,
+                date: new Date().toISOString(),
+            });
+        
+            // クリック数→時間の順で昇順ソート
+            scores.sort((a, b) => (a.clicks - b.clicks) || (a.time - b.time));
+        
+            // 先頭10件だけ残す
+            const top10 = scores.slice(0, 10);
+            localStorage.setItem("scores", JSON.stringify(top10));
+            return top10;
+        } catch (error) {
+            console.error('Error saving score:', error);
+            return [];
+        }
+    }
+
+    function getRanking() {
+        try {
+            const raw = localStorage.getItem("scores");
+            const scores = raw ? JSON.parse(raw) : [];
+            // 念のため毎回ソート（保存時と同じ基準）
+            return scores.sort((a, b) => (a.clicks - b.clicks) || (a.time - b.time));
+        } catch (error) {
+            console.error('Error getting ranking:', error);
+            return [];
+        }
+    }
+
+    function renderRanking(containerId = "result", limit = 5) {
+        const ranking = getRanking().slice(0, limit);
+        const el = document.getElementById(containerId);
+        if (!el) return;
+    
+        if (ranking.length === 0) {
+        el.innerHTML = "<p>まだスコアがありません。</p>";
+        return;
+        }
+    
+        el.innerHTML = ranking.map((s, i) => {
+        const sec = (s.time / 1000).toFixed(1);
+        const date = new Date(s.date).toLocaleString();
+        return `<p>${i + 1}位：${s.clicks}クリック / ${sec}秒 <span style="opacity:.7">(${date})</span></p>`;
+        }).join("");
+    }
+
+    function shareBest() {
+        const best = getRanking()[0];
+        if (!best) return alert("まだスコアがないよ！");
+        const text = `Wiki SixHopで ${best.clicks}クリック / ${(best.time/1000).toFixed(1)}秒！`;
+        const url = location.href;
+        // X(Twitter) Intent
+        const intent = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}&hashtags=WikiLink`;
+        window.open(intent, "_blank");
+    }
+
+
+    // ゲームデータの取得とスコア保存
+    function initializeGameClear() {
+        // URLパラメータからゲームデータを取得（優先）
+        const urlParams = new URLSearchParams(window.location.search);
+        let clicks = parseInt(urlParams.get('clicks')) || 0;
+        let timeMs = parseInt(urlParams.get('time')) || 0;
+        let target = urlParams.get('target') || 'ネコ';
+        
+        // デバッグ: URLパラメータの値を確認
+        console.log('URL parameters:', {
+            clicks_param: urlParams.get('clicks'),
+            timeMs_param: urlParams.get('time'),
+            target_param: urlParams.get('target')
+        });
+        
+        // フォールバック: テンプレート変数からも取得を試行
+        if (clicks === 0) clicks = parseInt("{{ clicks|default(0) }}") || 0;
+        if (timeMs === 0) timeMs = parseInt("{{ time_ms|default(0) }}") || 0;
+        if (target === 'ネコ') target = "{{ target|default('ネコ') }}";
+        
+        // デバッグ: テンプレート変数の生の値を確認
+        console.log('Template fallback values:', {
+            clicks_template: "{{ clicks|default(0) }}",
+            timeMs_template: "{{ time_ms|default(0) }}",
+            target_template: "{{ target|default('ネコ') }}"
+        });
+        
+        // デバッグ用ログ
+        console.log('Game Clear Data:', { clicks, timeMs, target });
+        console.log('URL:', window.location.href);
+        console.log('Template variables:', { 
+            clicks_template: "{{ clicks|default(0) }}", 
+            timeMs_template: "{{ time_ms|default(0) }}", 
+            target_template: "{{ target|default('ネコ') }}" 
+        });
+        
+        // スコア表示を更新
+        const scoreDetails = document.getElementById('score-details');
+        console.log('Score display check:', { scoreDetails: !!scoreDetails, clicks, timeMs, target });
+        
+        if (scoreDetails) {
+            // より柔軟な条件でスコア表示
+            if (clicks >= 0 && timeMs >= 0 && target && target !== 'ネコ') {
+                const timeSec = (timeMs / 1000).toFixed(1);
+                scoreDetails.textContent = `${clicks}クリック / ${timeSec}秒 (目標: ${target})`;
+                
+                // スコアを保存
+                const challengeId = `target_${target}_${new Date().toISOString().split('T')[0]}`;
+                const savedScores = saveScore({ clicks, timeMs, challengeId });
+                console.log('Saved scores:', savedScores);
+            } else if (clicks >= 0 && timeMs >= 0) {
+                // ターゲットがデフォルトでもクリック数と時間があれば表示
+                const timeSec = (timeMs / 1000).toFixed(1);
+                scoreDetails.textContent = `${clicks}クリック / ${timeSec}秒`;
+                
+                // スコアを保存
+                const challengeId = `target_${target}_${new Date().toISOString().split('T')[0]}`;
+                const savedScores = saveScore({ clicks, timeMs, challengeId });
+                console.log('Saved scores:', savedScores);
+            } else {
+                scoreDetails.textContent = `スコアデータが不正です (clicks: ${clicks}, time: ${timeMs}, target: ${target})`;
+                console.log('Invalid score data:', { clicks, timeMs, target });
+            }
+        } else {
+            console.error('Score details element not found');
+        }
+        
+        // ランキングを表示
+        renderRanking("result", 5);
+    }
+    
+    // ページ読み込み時に実行
+    document.addEventListener('DOMContentLoaded', initializeGameClear);
+</script>
+{% endblock %}
