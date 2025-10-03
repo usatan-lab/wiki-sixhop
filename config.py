@@ -14,7 +14,7 @@ class Config:
     
     # Wikipedia API設定
     WIKI_API_URL = os.environ.get('WIKI_API_URL', 'https://ja.wikipedia.org/w/api.php')
-    USER_AGENT = os.environ.get('USER_AGENT', 'WikiGameBot/1.0 (https://example.com)')
+    USER_AGENT = os.environ.get('USER_AGENT', 'WikiSixBot/1.0 (https://example.com)')
     
     # アプリケーションURL設定
     BASE_URL = os.environ.get('BASE_URL', 'http://localhost:5000')
