@@ -1,8 +1,8 @@
-# WikiGame
+# Wiki SixHop
 
 <<<<<<< HEAD
 
-WikiGameは、Wikipediaのリンクを辿ってゴールを目指すゲームです！🎮  
+Wiki SixHopは、Wikipediaのリンクを辿ってゴールを目指すゲームです！🎮  
 指定されたスタートページから、リンクをクリックしながらゴールページへ最短でたどり着こう！
 
 ## 🎯 ルール
@@ -21,8 +21,8 @@ WikiGameは、Wikipediaのリンクを辿ってゴールを目指すゲームで
 
 ## 📦 インストール & 実行方法
 ```bash
-git clone https://github.com/usatan-lab/WikiGame.git
-cd WikiGame
+git clone https://github.com/usatan-lab/Wiki_sixhop.git
+cd wiki_sixhop
 pip install -r requirements.txt
 python main.py  # 実行
 =======
