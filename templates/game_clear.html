@@ -247,9 +247,17 @@
         }
     }
 
-    // DOMContentLoadedイベントで実行
+    // DOMContentLoadedイベントで実行（confettiライブラリの読み込みを待つ）
     document.addEventListener('DOMContentLoaded', function() {
-        startConfetti();
+        // confettiライブラリが読み込まれるまで待機
+        function waitForConfetti() {
+            if (typeof confetti !== 'undefined') {
+                startConfetti();
+            } else {
+                setTimeout(waitForConfetti, 100);
+            }
+        }
+        waitForConfetti();
     });
 
     function saveScore({ clicks, timeMs, challengeId = "default" }) {
