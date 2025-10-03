@@ -208,53 +208,94 @@
     // confettiライブラリが読み込まれた後に実行
     function startConfetti() {
         if (typeof confetti !== 'undefined') {
-            // メインのクラッカー
-            confetti({
-                particleCount: 100,
-                spread: 70,
-                origin: { y: originY }
-            });
-
-            // 追加のクラッカー（少し遅延）
-            setTimeout(() => {
+            try {
+                // メインのクラッカー
                 confetti({
-                    particleCount: 50,
-                    angle: 60,
-                    spread: 55,
-                    origin: { x: 0, y: originY }
-                });
-            }, 250);
-
-            setTimeout(() => {
-                confetti({
-                    particleCount: 50,
-                    angle: 120,
-                    spread: 55,
-                    origin: { x: 1, y: originY }
-                });
-            }, 400);
-
-            // 最後の大爆発
-            setTimeout(() => {
-                confetti({
-                    particleCount: 200,
-                    spread: 100,
+                    particleCount: 100,
+                    spread: 70,
                     origin: { y: originY }
                 });
-            }, 800);
+
+                // 追加のクラッカー（少し遅延）
+                setTimeout(() => {
+                    try {
+                        confetti({
+                            particleCount: 50,
+                            angle: 60,
+                            spread: 55,
+                            origin: { x: 0, y: originY }
+                        });
+                    } catch (e) {
+                        console.warn('Confetti animation failed:', e);
+                    }
+                }, 250);
+
+                setTimeout(() => {
+                    try {
+                        confetti({
+                            particleCount: 50,
+                            angle: 120,
+                            spread: 55,
+                            origin: { x: 1, y: originY }
+                        });
+                    } catch (e) {
+                        console.warn('Confetti animation failed:', e);
+                    }
+                }, 400);
+
+                // 最後の大爆発
+                setTimeout(() => {
+                    try {
+                        confetti({
+                            particleCount: 200,
+                            spread: 100,
+                            origin: { y: originY }
+                        });
+                    } catch (e) {
+                        console.warn('Confetti animation failed:', e);
+                    }
+                }, 800);
+            } catch (e) {
+                console.error('Confetti initialization failed:', e);
+            }
         } else {
-            console.error('confetti library not loaded');
+            console.error('confetti library not loaded - trying to load manually');
+            // フォールバック: 手動でconfettiライブラリを読み込み
+            loadConfettiFallback();
         }
+    }
+
+    // フォールバック用のconfetti読み込み
+    function loadConfettiFallback() {
+        const script = document.createElement('script');
+        script.src = "{{ url_for('static', filename='js/confetti.browser.min.js') }}";
+        script.onload = function() {
+            console.log('Confetti library loaded via fallback');
+            setTimeout(startConfetti, 100);
+        };
+        script.onerror = function() {
+            console.error('Failed to load confetti library even via fallback');
+        };
+        document.head.appendChild(script);
     }
 
     // DOMContentLoadedイベントで実行（confettiライブラリの読み込みを待つ）
     document.addEventListener('DOMContentLoaded', function() {
-        // confettiライブラリが読み込まれるまで待機
+        // confettiライブラリが読み込まれるまで待機（最大5秒）
+        let attempts = 0;
+        const maxAttempts = 50; // 5秒間（100ms × 50回）
+        
         function waitForConfetti() {
             if (typeof confetti !== 'undefined') {
+                console.log('Confetti library found, starting animation');
                 startConfetti();
-            } else {
+            } else if (attempts < maxAttempts) {
+                attempts++;
+                console.log(`Waiting for confetti library... attempt ${attempts}/${maxAttempts}`);
                 setTimeout(waitForConfetti, 100);
+            } else {
+                console.error('Confetti library not loaded after 5 seconds, trying fallback');
+                loadConfettiFallback();
             }
         }
         waitForConfetti();

@@ -33,7 +33,7 @@
     
     <!-- JavaScriptのプリロード -->
     <link rel="preload" href="{{ url_for('static', filename='js/scripts.js') }}" as="script">
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js" as="script">
+    <link rel="preload" href="{{ url_for('static', filename='js/confetti.browser.min.js') }}" as="script">
     
     <!-- 初期レンダリング用のインラインCSS -->
     <style>
@@ -119,7 +119,7 @@
     </footer>
 
     <!-- スクリプトは通常、bodyの最後に配置 -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <script src="{{ url_for('static', filename='js/confetti.browser.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/scripts.js') }}" defer></script>
     
     <!-- お問い合わせモーダルのスクリプト -->
