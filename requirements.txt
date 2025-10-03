@@ -1,6 +1,7 @@
 Flask
 requests
 beautifulsoup4
+lxml
 gunicorn
 Flask-Limiter
 Flask-WTF

@@ -2,7 +2,7 @@ import os
 import requests
 from flask import Flask, render_template, redirect, url_for, request, jsonify, make_response
 from urllib.parse import unquote
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 from flask.views import MethodView
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -95,6 +95,7 @@ EXCLUDED_PREFIXES = app.config['EXCLUDED_PREFIXES']
 
 # サーバーサイドキャッシュ
 page_cache = {}
+links_cache = {}  # 解析済みリンク情報のキャッシュ
 CACHE_EXPIRY = 300  # 5分間キャッシュ
 
 # セキュリティ関数
@@ -157,6 +158,186 @@ def set_cached_page(page_title, data):
     """ページデータをキャッシュに保存"""
     cache_key = get_cache_key(page_title)
     page_cache[cache_key] = (data, time.time())
+
+def get_cached_links(page_title):
+    """キャッシュから解析済みリンク情報を取得"""
+    cache_key = get_cache_key(page_title)
+    if cache_key in links_cache:
+        cached_links, timestamp = links_cache[cache_key]
+        if time.time() - timestamp < CACHE_EXPIRY:
+            return cached_links
+        else:
+            # 期限切れのキャッシュを削除
+            del links_cache[cache_key]
+    return None
+
+def set_cached_links(page_title, links_data):
+    """解析済みリンク情報をキャッシュに保存"""
+    cache_key = get_cache_key(page_title)
+    links_cache[cache_key] = (links_data, time.time())
+
+def process_links_in_html(parsed_html, page_title, target_title, clicks_remaining, difficulty, start_time):
+    """HTML内のリンクを処理してURLを書き換える"""
+    # リンク情報キャッシュをチェック
+    cached_links = get_cached_links(page_title)
+    if cached_links:
+        logger.debug(f"Using cached links for page: {page_title}")
+        # キャッシュされたリンク情報を使用してHTMLを再構築
+        soup = BeautifulSoup(parsed_html, 'lxml')
+        for a in soup.find_all('a', href=True):
+            link = a['href']
+            if link.startswith('/wiki/'):
+                title = link.replace('/wiki/', '')
+                title = unquote(title).strip()
+                
+                # キャッシュされたリンク情報からページタイトルを確認
+                if title in cached_links:
+                    # 現在のクリック数に基づいてURLを動的生成
+                    new_clicks = clicks_remaining - 1
+                    
+                    if title == target_title:
+                        # ターゲットページへのリンクはクリック数に関係なく飛べる
+                        a['href'] = url_for('game', page=title, clicks=new_clicks,
+                                          mytarget=target_title, difficulty=difficulty,
+                                          start_time=start_time)
+                    elif new_clicks <= 0:
+                        a['href'] = url_for('game_over')
+                    else:
+                        a['href'] = url_for('game', page=title, clicks=new_clicks,
+                                          mytarget=target_title, difficulty=difficulty,
+                                          start_time=start_time)
+                else:
+                    # キャッシュにないリンクは無効化
+                    a['href'] = 'javascript:void(0);'
+                    a['onclick'] = 'alert("このリンクは使用できません。"); return false;'
+                    a['style'] = 'color: #999; cursor: not-allowed;'
+        
+        return f'<div id="mw-content-text">{str(soup)}</div>'
+    
+    # キャッシュがない場合は従来通り処理
+    soup = BeautifulSoup(parsed_html, 'lxml')
+    links_data = {}  # キャッシュ用のリンク情報
+    
+    for a in soup.find_all('a', href=True):
+        link = a['href']
+        
+        # Wikipedia内のリンクのみを許可
+        if not link.startswith('/wiki/'):
+            # 外部リンクの場合はクリックを無効化
+            a['href'] = 'javascript:void(0);'
+            a['onclick'] = 'alert("外部リンクはクリックできません。Wikipedia内のリンクのみ使用できます。"); return false;'
+            a['style'] = 'color: #999; cursor: not-allowed; text-decoration: line-through;'
+            continue
+
+        # 除外プレフィックスのチェック
+        if any(link.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            # 除外されたリンクもクリックを無効化
+            a['href'] = 'javascript:void(0);'
+            a['onclick'] = 'alert("このリンクは使用できません。"); return false;'
+            a['style'] = 'color: #999; cursor: not-allowed; text-decoration: line-through;'
+            continue
+
+        title = link.replace('/wiki/', '')
+        title = unquote(title).strip()
+
+        # 現在のページへのリンクは無効化
+        if title == page_title:
+            a['href'] = 'javascript:void(0);'
+            a['onclick'] = 'alert("現在のページです。"); return false;'
+            a['style'] = 'color: #999; cursor: not-allowed;'
+            continue
+
+        new_clicks = clicks_remaining - 1
+
+        if title == target_title:
+            # ターゲットページへのリンクはクリック数に関係なく飛べる
+            new_url = url_for('game', page=title, clicks=new_clicks,
+                            mytarget=target_title, difficulty=difficulty,
+                            start_time=start_time)
+            a['href'] = new_url
+            links_data[title] = new_url
+        elif new_clicks <= 0:
+            a['href'] = url_for('game_over')
+            links_data[title] = url_for('game_over')
+        else:
+            new_url = url_for('game', page=title, clicks=new_clicks,
+                            mytarget=target_title, difficulty=difficulty,
+                            start_time=start_time)
+            a['href'] = new_url
+            links_data[title] = new_url
+    
+    # リンク情報をキャッシュに保存
+    set_cached_links(page_title, links_data)
+    
+    return f'<div id="mw-content-text">{str(soup)}</div>'
+
+def process_links_for_api(parsed_html, page_title, target_title, clicks_remaining, difficulty, start_time):
+    """API用の軽量版リンク処理（リンク情報のみを返す）"""
+    # リンク情報キャッシュをチェック
+    cached_links = get_cached_links(page_title)
+    if cached_links:
+        logger.debug(f"Using cached links for API: {page_title}")
+        # キャッシュされたリンク情報からAPI用のデータを構築
+        links = []
+        for title in cached_links.keys():
+            if title != page_title:  # 現在のページへのリンクは除外
+                new_clicks = clicks_remaining - 1
+                links.append({
+                    'title': title,
+                    'href': f'/wiki/{title}',
+                    'clicks': new_clicks
+                })
+        return links[:50]  # 最初の50個のリンクのみ返す
+    
+    # キャッシュがない場合は従来通り処理
+    only_links = SoupStrainer('a')
+    soup = BeautifulSoup(parsed_html, 'lxml', parse_only=only_links)
+    links = []
+    links_data = {}  # キャッシュ用のリンク情報
+    
+    for a in soup.find_all('a', href=True):
+        link = a['href']
+        
+        # Wikipedia内のリンクのみを許可
+        if not link.startswith('/wiki/'):
+            continue
+
+        # 除外プレフィックスのチェック
+        if any(link.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
+            continue
+
+        title = link.replace('/wiki/', '')
+        title = unquote(title).strip()
+
+        # 現在のページへのリンクはスキップ
+        if title == page_title:
+            continue
+
+        new_clicks = clicks_remaining - 1
+        
+        # URLを生成してキャッシュ用データに保存
+        if title == target_title:
+            new_url = url_for('game', page=title, clicks=new_clicks,
+                            mytarget=target_title, difficulty=difficulty,
+                            start_time=start_time)
+        elif new_clicks <= 0:
+            new_url = url_for('game_over')
+        else:
+            new_url = url_for('game', page=title, clicks=new_clicks,
+                            mytarget=target_title, difficulty=difficulty,
+                            start_time=start_time)
+        
+        links_data[title] = new_url
+        links.append({
+            'title': title,
+            'href': link,
+            'clicks': new_clicks
+        })
+    
+    # リンク情報をキャッシュに保存
+    set_cached_links(page_title, links_data)
+    
+    return links[:50]  # 最初の50個のリンクのみ返す
 
 # ハードモード用のカテゴリ別ページリスト
 HARD_MODE_CATEGORIES = {
@@ -403,52 +584,9 @@ class GameView(MethodView):
 
             parsed_html = data['parse']['text']['*']
 
-            # リンク書き換え
-            soup = BeautifulSoup(parsed_html, 'html.parser')
-            for a in soup.find_all('a', href=True):
-                link = a['href']
-                
-                # Wikipedia内のリンクのみを許可
-                if not link.startswith('/wiki/'):
-                    # 外部リンクの場合はクリックを無効化
-                    a['href'] = 'javascript:void(0);'
-                    a['onclick'] = 'alert("外部リンクはクリックできません。Wikipedia内のリンクのみ使用できます。"); return false;'
-                    a['style'] = 'color: #999; cursor: not-allowed; text-decoration: line-through;'
-                    continue
-
-                # 除外プレフィックスのチェック
-                if any(link.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
-                    # 除外されたリンクもクリックを無効化
-                    a['href'] = 'javascript:void(0);'
-                    a['onclick'] = 'alert("このリンクは使用できません。"); return false;'
-                    a['style'] = 'color: #999; cursor: not-allowed; text-decoration: line-through;'
-                    continue
-
-                title = link.replace('/wiki/', '')
-                title = unquote(title).strip()
-
-                # 現在のページへのリンクは無効化
-                if title == page_title:
-                    a['href'] = 'javascript:void(0);'
-                    a['onclick'] = 'alert("現在のページです。"); return false;'
-                    a['style'] = 'color: #999; cursor: not-allowed;'
-                    continue
-
-                new_clicks = clicks_remaining - 1
-
-                if title == target_title:
-                    # ターゲットページへのリンクはクリック数に関係なく飛べる
-                    a['href'] = url_for('game', page=title, clicks=new_clicks,
-                                        mytarget=target_title, difficulty=difficulty,
-                                        start_time=start_time)
-                elif new_clicks <= 0:
-                    a['href'] = url_for('game_over')
-                else:
-                    a['href'] = url_for('game', page=title, clicks=new_clicks,
-                                        mytarget=target_title, difficulty=difficulty,
-                                        start_time=start_time)
-
-            parsed_html = f'<div id="mw-content-text">{str(soup)}</div>'
+            # リンク書き換え（キャッシュ機能付き）
+            parsed_html = process_links_in_html(parsed_html, page_title, target_title, 
+                                              clicks_remaining, difficulty, start_time)
 
         except KeyError as e:
             logger.error(f"GameView KeyError: {e}")
@@ -561,41 +699,16 @@ class GameDataView(MethodView):
 
             parsed_html = data['parse']['text']['*']
 
-            # リンク書き換え（軽量版）
-            soup = BeautifulSoup(parsed_html, 'html.parser')
-            links = []
-            
-            for a in soup.find_all('a', href=True):
-                link = a['href']
-                
-                # Wikipedia内のリンクのみを許可
-                if not link.startswith('/wiki/'):
-                    continue
-
-                # 除外プレフィックスのチェック
-                if any(link.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
-                    continue
-
-                title = link.replace('/wiki/', '')
-                title = unquote(title).strip()
-
-                # 現在のページへのリンクはスキップ
-                if title == page_title:
-                    continue
-
-                new_clicks = clicks_remaining - 1
-                links.append({
-                    'title': title,
-                    'href': link,
-                    'clicks': new_clicks
-                })
+            # リンク書き換え（キャッシュ機能付き軽量版）
+            links = process_links_for_api(parsed_html, page_title, target_title, 
+                                        clicks_remaining, difficulty, start_time)
 
             return jsonify({
                 'status': 'success',
                 'page_title': page_title,
                 'target_title': target_title,
                 'clicks_remaining': clicks_remaining,
-                'links': links[:50]  # 最初の50個のリンクのみ返す
+                'links': links
             })
 
         except Exception as e:
