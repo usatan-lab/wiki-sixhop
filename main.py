@@ -15,6 +15,7 @@ import threading
 import schedule
 from functools import lru_cache
 from config import config
+import hashlib
 
 # 設定の読み込み
 config_name = os.environ.get('FLASK_ENV', 'development')
@@ -92,6 +93,10 @@ session.mount('https://', adapter)
 # 除外するリンクのプレフィックスリスト
 EXCLUDED_PREFIXES = app.config['EXCLUDED_PREFIXES']
 
+# サーバーサイドキャッシュ
+page_cache = {}
+CACHE_EXPIRY = 300  # 5分間キャッシュ
+
 # セキュリティ関数
 def sanitize_input(text):
     """入力文字列のサニタイゼーション"""
@@ -131,6 +136,27 @@ def log_security_event(event_type, details, ip_address=None):
         ip_address = get_remote_address()
     
     logger.warning(f"SECURITY_EVENT: {event_type} - IP: {ip_address} - Details: {details}")
+
+def get_cache_key(page_title):
+    """キャッシュキーを生成"""
+    return hashlib.md5(page_title.encode('utf-8')).hexdigest()
+
+def get_cached_page(page_title):
+    """キャッシュからページデータを取得"""
+    cache_key = get_cache_key(page_title)
+    if cache_key in page_cache:
+        cached_data, timestamp = page_cache[cache_key]
+        if time.time() - timestamp < CACHE_EXPIRY:
+            return cached_data
+        else:
+            # 期限切れのキャッシュを削除
+            del page_cache[cache_key]
+    return None
+
+def set_cached_page(page_title, data):
+    """ページデータをキャッシュに保存"""
+    cache_key = get_cache_key(page_title)
+    page_cache[cache_key] = (data, time.time())
 
 # ハードモード用のカテゴリ別ページリスト
 HARD_MODE_CATEGORIES = {
@@ -345,23 +371,32 @@ class GameView(MethodView):
             app.logger.debug("GameView: Game Over")
             return redirect(url_for('game_over'))
 
-        # ページ内容の取得（最適化版）
-        params = {
-            'action': 'parse',
-            'page': page_title,
-            'format': 'json',
-            'prop': 'text',
-            'redirects': 1,
-            'disableeditsection': 1,  # 編集セクションを無効化してレスポンスを軽量化
-            'disabletoc': 1,  # 目次を無効化
-            'disablelimitreport': 1,  # 制限レポートを無効化
-            'disablepp': 1  # 前処理を無効化
-        }
-        
         try:
-            # セッションを使用してタイムアウトを短縮
-            response = session.get(WIKI_API_URL, params=params, timeout=3)
-            data = response.json()
+            # キャッシュからページデータを取得
+            cached_data = get_cached_page(page_title)
+            if cached_data:
+                logger.debug(f"Using cached data for page: {page_title}")
+                data = cached_data
+            else:
+                # ページ内容の取得（最適化版）
+                params = {
+                    'action': 'parse',
+                    'page': page_title,
+                    'format': 'json',
+                    'prop': 'text',
+                    'redirects': 1,
+                    'disableeditsection': 1,  # 編集セクションを無効化してレスポンスを軽量化
+                    'disabletoc': 1,  # 目次を無効化
+                    'disablelimitreport': 1,  # 制限レポートを無効化
+                    'disablepp': 1  # 前処理を無効化
+                }
+                
+                # セッションを使用してタイムアウトを短縮（さらに短縮）
+                response = session.get(WIKI_API_URL, params=params, timeout=2)
+                data = response.json()
+                
+                # データをキャッシュに保存
+                set_cached_page(page_title, data)
 
             if 'parse' not in data:
                 raise KeyError("'parse' キーがレスポンスに存在しません。")
@@ -496,22 +531,30 @@ class GameDataView(MethodView):
         if clicks_remaining <= 0:
             return jsonify({'status': 'over'})
 
-        # ページ内容の取得（軽量版）
-        params = {
-            'action': 'parse',
-            'page': page_title,
-            'format': 'json',
-            'prop': 'text',
-            'redirects': 1,
-            'disableeditsection': 1,
-            'disabletoc': 1,
-            'disablelimitreport': 1,
-            'disablepp': 1
-        }
-        
         try:
-            response = session.get(WIKI_API_URL, params=params, timeout=3)
-            data = response.json()
+            # キャッシュからページデータを取得
+            cached_data = get_cached_page(page_title)
+            if cached_data:
+                data = cached_data
+            else:
+                # ページ内容の取得（軽量版）
+                params = {
+                    'action': 'parse',
+                    'page': page_title,
+                    'format': 'json',
+                    'prop': 'text',
+                    'redirects': 1,
+                    'disableeditsection': 1,
+                    'disabletoc': 1,
+                    'disablelimitreport': 1,
+                    'disablepp': 1
+                }
+                
+                response = session.get(WIKI_API_URL, params=params, timeout=2)
+                data = response.json()
+                
+                # データをキャッシュに保存
+                set_cached_page(page_title, data)
 
             if 'parse' not in data:
                 raise KeyError("'parse' キーがレスポンスに存在しません。")

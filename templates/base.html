@@ -27,12 +27,52 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- CSSのプリロード -->
+    <!-- CSSの読み込み（レンダリングブロッキングを防ぐため） -->
     <link rel="preload" href="{{ url_for('static', filename='css/styles.css') }}" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}"></noscript>
     
     <!-- JavaScriptのプリロード -->
     <link rel="preload" href="{{ url_for('static', filename='js/scripts.js') }}" as="script">
+    
+    <!-- 初期レンダリング用のインラインCSS -->
+    <style>
+        /* 初期レンダリング時のレイアウト調整 */
+        body { 
+            font-family: "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            margin: 0;
+            max-width: 200px;
+            width: auto;
+            text-align: center;
+            font-family: inherit;
+        }
+        .button-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            margin-bottom: 30px;
+        }
+        .level-select-btn {
+            max-width: 200px;
+            width: 150px;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -79,8 +119,8 @@
     </footer>
 
     <!-- スクリプトは通常、bodyの最後に配置 -->
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
-    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/scripts.js') }}" defer></script>
     
     <!-- お問い合わせモーダルのスクリプト -->
     <script>
@@ -103,6 +143,24 @@
                 }
             }
         });
+        
+        // CSS読み込み完了の確認
+        function loadCSS() {
+            const link = document.querySelector('link[rel="preload"][as="style"]');
+            if (link) {
+                link.onload = function() {
+                    this.onload = null;
+                    this.rel = 'stylesheet';
+                };
+            }
+        }
+        
+        // ページ読み込み時にCSS読み込みを開始
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadCSS);
+        } else {
+            loadCSS();
+        }
     </script>
 </body>
 

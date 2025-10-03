@@ -53,11 +53,15 @@ document.addEventListener('keydown', function(e) {
     }, 500);
 })();
 
-// リンクのプリロード機能
+// リンクのプリロード機能（強化版）
 let preloadCache = new Map();
 let preloadTimeout = null;
+let preloadQueue = [];
+let isPreloading = false;
+let maxConcurrentPreloads = 3;
+let activePreloads = 0;
 
-// リンクにマウスオーバーした時にプリロード
+// より積極的なプリロード戦略
 document.addEventListener('mouseover', function(e) {
     const link = e.target.closest('a[href]');
     if (!link || !link.href) return;
@@ -68,18 +72,45 @@ document.addEventListener('mouseover', function(e) {
     // 既にプリロード済みの場合はスキップ
     if (preloadCache.has(link.href)) return;
     
-    // デバウンス処理（連続したマウスオーバーを防ぐ）
+    // 即座にプリロードを開始（デバウンスを短縮）
     clearTimeout(preloadTimeout);
     preloadTimeout = setTimeout(() => {
         preloadPage(link.href);
-    }, 100);
+    }, 50); // 100ms → 50msに短縮
 });
 
-// ページのプリロード関数
+// ページ内の全てのリンクを事前にプリロード
+function preloadVisibleLinks() {
+    const links = document.querySelectorAll('a[href*="/game?page="]');
+    const visibleLinks = Array.from(links).filter(link => {
+        const rect = link.getBoundingClientRect();
+        return rect.top < window.innerHeight && rect.bottom > 0;
+    });
+    
+    // 見えているリンクを優先的にプリロード
+    visibleLinks.slice(0, 5).forEach(link => {
+        if (!preloadCache.has(link.href)) {
+            preloadPage(link.href);
+        }
+    });
+}
+
+// ページ読み込み完了後に見えるリンクをプリロード
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(preloadVisibleLinks, 500);
+});
+
+// ページのプリロード関数（並列処理対応）
 function preloadPage(url) {
     if (preloadCache.has(url)) return;
     
-    // プリロード中フラグを設定
+    // 同時プリロード数の制限
+    if (activePreloads >= maxConcurrentPreloads) {
+        preloadQueue.push(url);
+        return;
+    }
+    
+    activePreloads++;
     preloadCache.set(url, 'loading');
     
     // URLからパラメータを抽出
@@ -93,15 +124,20 @@ function preloadPage(url) {
     // 軽量なAPIエンドポイントを使用
     const apiUrl = `/game_data?page=${encodeURIComponent(page)}&clicks=${clicks}&mytarget=${encodeURIComponent(mytarget)}&difficulty=${difficulty}&start_time=${start_time}`;
     
-    // fetchでページデータをプリロード
+    // fetchでページデータをプリロード（タイムアウト短縮）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000); // 2秒でタイムアウト
+    
     fetch(apiUrl, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json'
-        }
+        },
+        signal: controller.signal
     })
     .then(response => {
+        clearTimeout(timeoutId);
         if (response.ok) {
             return response.json();
         } else {
@@ -110,19 +146,34 @@ function preloadPage(url) {
     })
     .then(data => {
         if (data.status === 'success') {
-            preloadCache.set(url, 'loaded');
+            preloadCache.set(url, {
+                status: 'loaded',
+                data: data,
+                timestamp: Date.now()
+            });
             console.log('Page preloaded:', url);
         } else {
             preloadCache.delete(url);
         }
     })
     .catch(error => {
-        console.warn('Preload failed:', url, error);
+        clearTimeout(timeoutId);
+        if (error.name !== 'AbortError') {
+            console.warn('Preload failed:', url, error);
+        }
         preloadCache.delete(url);
+    })
+    .finally(() => {
+        activePreloads--;
+        // キューに待機中のプリロードがあれば実行
+        if (preloadQueue.length > 0) {
+            const nextUrl = preloadQueue.shift();
+            setTimeout(() => preloadPage(nextUrl), 100);
+        }
     });
 }
 
-// リンククリック時の処理（ローディング表示なし）
+// リンククリック時の処理（最適化版）
 document.addEventListener('click', function(e) {
     const link = e.target.closest('a[href]');
     if (!link || !link.href) return;
@@ -131,14 +182,59 @@ document.addEventListener('click', function(e) {
     if (!link.href.includes('/game?page=')) return;
     
     // プリロード済みの場合は即座に遷移
-    if (preloadCache.has(link.href) && preloadCache.get(link.href) === 'loaded') {
+    const cached = preloadCache.get(link.href);
+    if (cached && cached.status === 'loaded') {
         // プリロード済みなので即座に遷移
+        showLoadingIndicator();
         return;
     }
     
-    // 通常の遷移（ローディング表示なし）
+    // ローディング表示を追加
+    showLoadingIndicator();
+    
+    // 通常の遷移
     window.location.href = link.href;
 });
+
+// ローディングインジケーターの表示
+function showLoadingIndicator() {
+    // 既存のローディングインジケーターを削除
+    const existing = document.getElementById('loading-indicator');
+    if (existing) {
+        existing.remove();
+    }
+    
+    // 新しいローディングインジケーターを作成
+    const indicator = document.createElement('div');
+    indicator.id = 'loading-indicator';
+    indicator.innerHTML = `
+        <div style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #007bff, #00d4ff);
+            z-index: 9999;
+            animation: loading 1s ease-in-out infinite;
+        "></div>
+        <style>
+            @keyframes loading {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+            }
+        </style>
+    `;
+    
+    document.body.appendChild(indicator);
+    
+    // ページ遷移時に自動削除
+    setTimeout(() => {
+        if (indicator.parentNode) {
+            indicator.remove();
+        }
+    }, 2000);
+}
 
 
 // Service Workerの登録（キャッシュ機能向上）
