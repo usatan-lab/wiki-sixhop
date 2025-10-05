@@ -176,6 +176,109 @@ def set_cached_links(page_title, links_data):
     cache_key = get_cache_key(page_title)
     links_cache[cache_key] = (links_data, time.time())
 
+def optimize_html_content(parsed_html):
+    """
+    HTMLコンテンツを最適化して軽量化する
+    - 不要なタグ、要素、属性を削除
+    - HTMLを圧縮して転送サイズを削減
+    """
+    # 最適化が無効化されている場合はそのまま返す
+    if not app.config.get('ENABLE_HTML_OPTIMIZATION', True):
+        return parsed_html
+    
+    soup = BeautifulSoup(parsed_html, 'lxml')
+    
+    # タグ名で削除する要素（高速）
+    tags_to_remove = ['style', 'script', 'noscript', 'iframe', 'embed', 'object']
+    for tag_name in tags_to_remove:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+    
+    # CSSセレクタで削除する要素
+    selectors_to_remove = [
+        '.mw-editsection',    # 編集セクション
+        '.mw-jump-link',      # ジャンプリンク
+        '.reference',         # 参考文献
+        '.mw-cite-backlink',  # 引用リンク
+        '.noprint',           # 印刷しない要素
+        '.ambox',             # メッセージボックス
+        '.navbox',            # ナビゲーションボックス
+        '.sistersitebox',     # 姉妹サイトボックス
+        '.metadata',          # メタデータ
+        '.catlinks',          # カテゴリリンク
+        '.reflist',           # 参考文献リスト
+        '.thumb',             # サムネイル画像
+        '.gallery',           # ギャラリー
+        '.toc',               # 目次
+        '.infobox',           # インフォボックス（表が大きいため）
+        '.sidebar',           # サイドバー
+        '.navbox-inner',      # ナビボックスの内部
+        '.refbegin',          # 参考文献の開始
+        '.portalbox',         # ポータルボックス
+        '.hatnote',           # ヘッドノート
+        '.dablink',           # 曖昧さ回避リンク
+        '.rellink',           # 関連リンク
+        '.mainarticle',       # メイン記事
+        '#toc',               # 目次のID
+        'table',              # すべてのテーブル（大きいため）
+        'sup.reference',      # 上付き参照
+        'ol.references',      # 参考文献のリスト
+    ]
+    
+    for selector in selectors_to_remove:
+        for element in soup.select(selector):
+            element.decompose()
+    
+    # 外部リンクを完全に削除（設定で制御）
+    if app.config.get('REMOVE_EXTERNAL_LINKS', True):
+        for a in soup.find_all('a', href=True):
+            href = a.get('href', '')
+            # Wikipedia内のリンク以外を削除
+            if not href.startswith('/wiki/'):
+                a.decompose()
+    
+    # 画像の遅延読み込み属性を追加（オプション）
+    for img in soup.find_all('img'):
+        img['loading'] = 'lazy'
+        # srcset属性を削除（複数解像度の画像を削除）
+        if 'srcset' in img.attrs:
+            del img['srcset']
+    
+    # 不要な属性を削除（リンク以外）
+    for element in soup.find_all():
+        # リンク要素のhref属性は保持
+        if element.name == 'a':
+            attrs_to_keep = ['href', 'title']
+        # 画像要素のsrc属性は保持
+        elif element.name == 'img':
+            attrs_to_keep = ['src', 'alt', 'loading']
+        else:
+            attrs_to_keep = []
+        
+        # 不要な属性を削除
+        attrs = list(element.attrs.keys())
+        for attr in attrs:
+            if attr not in attrs_to_keep:
+                del element.attrs[attr]
+    
+    # HTMLを文字列に変換
+    html_str = str(soup)
+    
+    # HTMLの圧縮（minification）
+    if app.config.get('ENABLE_HTML_COMPRESSION', True):
+        # 連続する空白を単一の空白に置換
+        html_str = re.sub(r'\s+', ' ', html_str)
+        # タグ間の空白を削除
+        html_str = re.sub(r'>\s+<', '><', html_str)
+        # タグ後の空白を削除
+        html_str = re.sub(r'>\s+', '>', html_str)
+        # タグ前の空白を削除
+        html_str = re.sub(r'\s+<', '<', html_str)
+    
+    logger.debug(f"HTML optimized: Original size ~ {len(parsed_html)} bytes, Optimized size ~ {len(html_str)} bytes")
+    
+    return html_str
+
 def process_links_in_html(parsed_html, page_title, target_title, clicks_remaining, difficulty, start_time):
     """HTML内のリンクを処理してURLを書き換える"""
     # リンク情報キャッシュをチェック
@@ -583,6 +686,9 @@ class GameView(MethodView):
                 raise KeyError("'parse' キーがレスポンスに存在しません。")
 
             parsed_html = data['parse']['text']['*']
+            
+            # HTMLコンテンツの最適化（不要な要素を削除）
+            parsed_html = optimize_html_content(parsed_html)
 
             # リンク書き換え（キャッシュ機能付き）
             parsed_html = process_links_in_html(parsed_html, page_title, target_title, 
@@ -698,6 +804,9 @@ class GameDataView(MethodView):
                 raise KeyError("'parse' キーがレスポンスに存在しません。")
 
             parsed_html = data['parse']['text']['*']
+            
+            # HTMLコンテンツの最適化（不要な要素を削除）
+            parsed_html = optimize_html_content(parsed_html)
 
             # リンク書き換え（キャッシュ機能付き軽量版）
             links = process_links_for_api(parsed_html, page_title, target_title, 

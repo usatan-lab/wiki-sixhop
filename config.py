@@ -31,6 +31,11 @@ class Config:
     TARGET_TITLE = "ネコ"
     INITIAL_CLICKS = 6
     
+    # HTML最適化設定
+    ENABLE_HTML_OPTIMIZATION = os.environ.get('ENABLE_HTML_OPTIMIZATION', 'True').lower() == 'true'
+    ENABLE_HTML_COMPRESSION = os.environ.get('ENABLE_HTML_COMPRESSION', 'True').lower() == 'true'
+    REMOVE_EXTERNAL_LINKS = os.environ.get('REMOVE_EXTERNAL_LINKS', 'True').lower() == 'true'
+    
     # 除外するリンクのプレフィックスリスト
     EXCLUDED_PREFIXES = [
         '/wiki/Special:',
